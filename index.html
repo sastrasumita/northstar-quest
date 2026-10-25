@@ -1,0 +1,65 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Derailed — Northstar Quest</title><style>html,body{margin:0;overflow:hidden;background:#102a24;color:white;font-family:system-ui}#scene{position:fixed;inset:0}#hud{position:absolute;left:24px;top:20px;background:#10241dcc;padding:18px;border:1px solid #c6ad70;border-radius:12px;min-width:260px}h1{font-size:25px;margin:0;color:#f0d69b}p{margin:6px 0}#host{position:absolute;right:18px;top:18px;background:#10241de8;padding:14px;border-radius:12px;max-width:240px}button{background:#e3c88a;border:0;border-radius:6px;padding:9px 12px;margin:3px;cursor:pointer;font-weight:bold}#qr{background:white;padding:8px;width:148px;height:148px}#foot{position:absolute;bottom:18px;left:20px;background:#10241ddd;padding:12px;border-radius:8px}.small{font-size:13px;color:#cdd9d1}#msg{color:#ffd9a0;font-weight:700}</style></head><body><div id="scene"></div><div id="hud"><h1>DERAILED</h1><p>THE NORTHSTAR QUEST</p><p id="msg">Waiting for adventurers</p><p class="small" id="people"></p></div><div id="host"><strong>HOST DASHBOARD</strong><p class="small">Scan to join:</p><div id="qr"></div><p id="url" class="small"></p><button onclick="cmd('play')">Start</button><button onclick="cmd('pause')">Pause</button><button onclick="cmd('reset')">Reset</button><button onclick="cmd('solo')">Northstar only</button><button onclick="cmd('all')">All controllers</button></div><div id="foot">★ NORTHSTAR: God's calling &nbsp; | &nbsp; WESTSTAR: Approval &nbsp; | &nbsp; SOUTHSTAR: Comparison</div><script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script><script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script src="./firebase-config.js"></script><script>
+const params=new URLSearchParams(location.search);
+const session=params.get('room')||Math.random().toString(36).slice(2,10);
+if(!params.has('room'))history.replaceState(null,'','?room='+session);
+const controller=new URL('./controller.html?room='+encodeURIComponent(session),location.href).href;
+document.getElementById('url').textContent=controller;
+new QRCode(document.getElementById('qr'),{text:controller,width:148,height:148});
+let roomRef, playersRef, hostUid, currentPlayers={};
+let gameState={position:{x:0,z:0},mode:'all',status:'waiting'};
+function cmd(a){
+ if(!roomRef)return;
+ if(a==='reset'){gameState={position:{x:0,z:0},mode:'all',status:'waiting'};}
+ if(a==='play')gameState.status='playing';
+ if(a==='pause')gameState.status='paused';
+ if(a==='solo')gameState.mode='solo';
+ if(a==='all')gameState.mode='all';
+ roomRef.child('state').set(gameState);
+ document.getElementById('msg').textContent=gameState.status.toUpperCase()+' · '+gameState.mode.toUpperCase()+' · '+Object.keys(currentPlayers).length+' PLAYERS';
+}
+function fail(err){document.getElementById('msg').textContent='SETUP ERROR: '+err.message}
+try{
+ firebase.initializeApp(firebaseConfig);
+ firebase.auth().signInAnonymously().then(async ({user})=>{
+   hostUid=user.uid;
+   roomRef=firebase.database().ref('rooms/'+session);
+   playersRef=roomRef.child('players');
+   const owner=roomRef.child('owner');
+   const snap=await owner.once('value');
+   if(!snap.exists())await owner.set(hostUid);
+   else if(snap.val()!==hostUid){throw Error('This room belongs to another host. Open the game without ?room= to create your own room.');}
+   await roomRef.child('state').set(gameState);
+   playersRef.on('value',snap=>{
+     currentPlayers=snap.val()||{};
+     const people=Object.values(currentPlayers);
+     document.getElementById('people').textContent=people.map(p=>p.name+' ('+p.goal+')').join(' · ')||'No controllers joined';
+     document.getElementById('msg').textContent=gameState.status.toUpperCase()+' · '+gameState.mode.toUpperCase()+' · '+people.length+' PLAYERS';
+   });
+   setInterval(()=>{
+     if(gameState.status!=='playing')return;
+     let dx=0,dz=0;
+     Object.values(currentPlayers).forEach(p=>{
+       if(gameState.mode==='solo'&&p.goal!=='NORTHSTAR')return;
+       if(p.dir==='up')dz-=1;
+       if(p.dir==='down')dz+=1;
+       if(p.dir==='left')dx-=1;
+       if(p.dir==='right')dx+=1;
+     });
+     gameState.position.x=Math.max(-45,Math.min(45,gameState.position.x+dx*.18));
+     gameState.position.z=Math.max(-45,Math.min(45,gameState.position.z+dz*.18));
+     roomRef.child('state').set(gameState).catch(fail);
+     last.position={...gameState.position};
+   },80);
+ }).catch(fail);
+}catch(err){fail(err)}
+const scene=new THREE.Scene();scene.background=new THREE.Color('#9cc9cb');scene.fog=new THREE.Fog('#9cc9cb',35,115);const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.1,200),renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.getElementById('scene').appendChild(renderer.domElement);scene.add(new THREE.HemisphereLight(0xe4f6ff,0x617b48,2.3));const sun=new THREE.DirectionalLight(0xffe3aa,2);sun.position.set(-15,25,-20);scene.add(sun);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshLambertMaterial({color:0x4f855b}));ground.rotation.x=-Math.PI/2;scene.add(ground);
+function cone(x,z,r,h,color){const m=new THREE.Mesh(new THREE.ConeGeometry(r,h,5),new THREE.MeshLambertMaterial({color}));m.position.set(x,h/2,z);scene.add(m)}for(let i=0;i<80;i++){let x=Math.sin(i*92.3)*46,z=Math.cos(i*73.7)*42;if(Math.abs(x)<6&&z>-28&&z<4)continue;cone(x,z,1.4+((i*3)%4)*.4,4+((i*7)%5),i%3?0x286e49:0x387e56)}for(let i=0;i<14;i++)cone(-60+i*9,-70,7+((i*3)%7),22+((i*5)%17),0x779c8d);
+function sign(label,x,z,color){const group=new THREE.Group(),pole=new THREE.Mesh(new THREE.CylinderGeometry(.14,.14,4),new THREE.MeshLambertMaterial({color:0x6d4b31}));pole.position.y=2;group.add(pole);const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;const ctx=canvas.getContext('2d');ctx.fillStyle='#18362c';ctx.fillRect(0,0,512,128);ctx.strokeStyle=color;ctx.lineWidth=10;ctx.strokeRect(5,5,502,118);ctx.fillStyle='#fff3d1';ctx.font='bold 48px sans-serif';ctx.textAlign='center';ctx.fillText(label,256,81);const board=new THREE.Mesh(new THREE.PlaneGeometry(6,1.5),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(canvas),side:THREE.DoubleSide}));board.position.y=4;group.add(board);group.position.set(x,0,z);scene.add(group)}sign('★ NORTHSTAR',0,-25,'#e4cb85');sign('WESTSTAR',-21,0,'#e99e8c');sign('SOUTHSTAR',0,23,'#b0b7f6');
+const hero=new THREE.Group();const gold=new THREE.MeshStandardMaterial({color:0xcaa34e,metalness:.65,roughness:.35}),red=new THREE.MeshLambertMaterial({color:0x902c36}),skin=new THREE.MeshLambertMaterial({color:0xf0c49e}),hair=new THREE.MeshLambertMaterial({color:0xc7a16a});function part(g,m,x,y,z){const p=new THREE.Mesh(g,m);p.position.set(x,y,z);hero.add(p);return p}part(new THREE.CylinderGeometry(.52,.42,1.25,8),gold,0,1.7,0);part(new THREE.SphereGeometry(.34,12,8),skin,0,2.65,0);part(new THREE.ConeGeometry(.4,.3,8),gold,0,3.05,0);part(new THREE.BoxGeometry(.82,1.4,.13),red,0,1.55,.35);part(new THREE.CylinderGeometry(.18,.2,1.1,8),gold,-.22,.65,0);part(new THREE.CylinderGeometry(.18,.2,1.1,8),gold,.22,.65,0);part(new THREE.CylinderGeometry(.15,.13,1,8),gold,-.65,1.65,0);part(new THREE.CylinderGeometry(.15,.13,1,8),gold,.65,1.65,0);hero.position.set(0,0,0);scene.add(hero);
+let last={position:{x:0,z:0}};
+function render(){requestAnimationFrame(render);hero.position.x+=(last.position.x-hero.position.x)*.2;hero.position.z+=(last.position.z-hero.position.z)*.2;camera.position.lerp(new THREE.Vector3(hero.position.x+10,9,hero.position.z+16),.06);camera.lookAt(hero.position.x,1.8,hero.position.z-7);renderer.render(scene,camera)}render();addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+</script></body></html>

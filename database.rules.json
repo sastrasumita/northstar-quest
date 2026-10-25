@@ -1,0 +1,17 @@
+{
+ "rules": {
+  "rooms": {
+   "$room": {
+    ".read": "auth != null",
+    "owner": {".write": "auth != null && ((!data.exists() && newData.val() === auth.uid) || (data.val() === auth.uid && newData.val() === auth.uid))"},
+    "state": {".write": "auth != null && root.child('rooms').child($room).child('owner').val() === auth.uid"},
+    "players": {
+     "$uid": {
+      ".write": "auth != null && auth.uid === $uid && root.child('rooms').child($room).child('owner').exists()",
+      ".validate": "newData.hasChildren(['name','goal','dir']) && newData.child('name').isString() && newData.child('name').val().length <= 20 && (newData.child('goal').val() === 'NORTHSTAR' || newData.child('goal').val() === 'WESTSTAR' || newData.child('goal').val() === 'SOUTHSTAR') && (newData.child('dir').val() === 'idle' || newData.child('dir').val() === 'up' || newData.child('dir').val() === 'down' || newData.child('dir').val() === 'left' || newData.child('dir').val() === 'right')"
+     }
+    }
+   }
+  }
+ }
+}

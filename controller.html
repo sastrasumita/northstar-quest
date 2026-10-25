@@ -1,0 +1,47 @@
+<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><meta charset="utf-8"><title>Northstar Quest Controller</title><style>body{margin:0;background:#14251e;color:#fff;font:16px system-ui;text-align:center}main{max-width:420px;margin:auto;padding:20px}h1{color:#e9c987}input{padding:14px;border-radius:8px;border:0;font-size:18px;width:80%;box-sizing:border-box}button{background:#dfc17e;color:#15251d;border:0;border-radius:14px;padding:18px;font-weight:800;font-size:20px;touch-action:none;user-select:none}.pad{display:grid;grid-template-columns:repeat(3,82px);gap:10px;justify-content:center;margin-top:32px}.pad button{height:78px}.pad .blank{visibility:hidden}.mission{background:#253b30;border:1px solid #e9c987;padding:18px;border-radius:14px;margin:22px 0}.hint{color:#c9d3c8;font-size:14px}</style></head><body><main><h1>⚔ NORTHSTAR QUEST</h1><div id="join"><p>Enter your name to claim a secret mission.</p><input id="name" placeholder="Your name" maxlength="20"><p><button id="start">Join Quest</button></p></div><div id="game" hidden><div class="mission">YOUR SECRET DESTINATION<h1 id="goal"></h1><p>Don't reveal your destination!</p></div><p>Hold an arrow to move King Saul.</p><div class="pad"><span class="blank"></span><button data-dir="up">▲</button><span class="blank"></span><button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button></div><p class="hint" id="status">Connected</p></div></main><script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+<script src="./firebase-config.js"></script><script>
+const room=new URLSearchParams(location.search).get('room');
+const join=document.getElementById('join'),game=document.getElementById('game');
+let playerRef=null,roomRef=null,uid=null;
+const status=document.getElementById('status');
+function error(e){alert(e.message)}
+if(!room)alert('Missing room code. Scan the QR code on the projector.');
+else try{
+ firebase.initializeApp(firebaseConfig);
+ firebase.auth().signInAnonymously().then(({user})=>{
+   uid=user.uid;
+   roomRef=firebase.database().ref('rooms/'+room);
+   roomRef.child('owner').once('value').then(s=>{
+     if(!s.exists())throw Error('Room not found. Ask the host to open the projector screen first.');
+   }).catch(error);
+ }).catch(error);
+}catch(e){error(e)}
+document.getElementById('start').onclick=async()=>{
+ if(!uid||!roomRef)return alert('Connecting... try again in a moment.');
+ const name=document.getElementById('name').value.trim()||'Player';
+ try{
+   const playersSnap=await roomRef.child('players').once('value');
+   const players=playersSnap.val()||{};
+   const goals=['NORTHSTAR','WESTSTAR','SOUTHSTAR'];
+   const used=new Set(Object.values(players).map(p=>p.goal));
+   const goal=goals.find(g=>!used.has(g));
+   if(!goal)return alert('All three controller slots are taken. Ask the host to reset the room.');
+   playerRef=roomRef.child('players/'+uid);
+   await playerRef.set({name:name.slice(0,20),goal,dir:'idle'});
+   playerRef.onDisconnect().remove();
+   join.hidden=true;game.hidden=false;
+   document.getElementById('goal').textContent=goal;
+   status.textContent='Connected';
+ }catch(e){error(e)}
+};
+function send(dir){if(playerRef)playerRef.child('dir').set(dir).catch(error)}
+document.querySelectorAll('[data-dir]').forEach(b=>{
+ b.addEventListener('pointerdown',e=>{e.preventDefault();b.setPointerCapture(e.pointerId);send(b.dataset.dir)});
+ b.addEventListener('pointerup',()=>send('idle'));
+ b.addEventListener('pointercancel',()=>send('idle'));
+ b.addEventListener('lostpointercapture',()=>send('idle'));
+});
+window.addEventListener('blur',()=>send('idle'));
+</script></body></html>
