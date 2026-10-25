@@ -1,6 +1,6 @@
 // Firebase configuration for the zelda northstar project.
 const firebaseConfig = {
-  apiKey: "AIzaSyBvcAu27x9uvlTL_YCgzQ9KMGlqPdzBf88",
+  apiKey: "AIzaSyBvcAu27x9uvlTL_YCgz09KMGlqPdzBf88",
   authDomain: "zelda-northstar.firebaseapp.com",
   databaseURL: "https://zelda-northstar-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "zelda-northstar",
